@@ -16,6 +16,7 @@
 
 package org.springframework.boot;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,6 +32,7 @@ import java.util.function.Supplier;
 
 import jakarta.annotation.PostConstruct;
 import org.assertj.core.api.Condition;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -160,7 +162,9 @@ import static org.mockito.Mockito.spy;
  * @author Nguyen Bao Sach
  * @author Chris Bono
  * @author Sebastien Deleuze
+ * @author Moritz Halbritter
  * @author Tadaya Tsuyukubo
+ * @author Yanming Zhou
  */
 @ExtendWith(OutputCaptureExtension.class)
 class SpringApplicationTests {
@@ -1387,6 +1391,21 @@ class SpringApplicationTests {
 	}
 
 	@Test
+	void shouldReportFriendlyErrorIfAotInitializerNotFound() {
+		SpringApplication application = new SpringApplication(TestSpringApplication.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		application.setMainApplicationClass(TestSpringApplication.class);
+		System.setProperty(AotDetector.AOT_ENABLED, "true");
+		try {
+			assertThatIllegalStateException().isThrownBy(application::run)
+				.withMessageContaining("but AOT processing hasn't happened");
+		}
+		finally {
+			System.clearProperty(AotDetector.AOT_ENABLED);
+		}
+	}
+
+	@Test
 	void fromRunsWithAdditionalSources() {
 		assertThat(ExampleAdditionalConfig.local.get()).isNull();
 		this.context = SpringApplication.from(ExampleFromMainMethod::main)
@@ -1413,6 +1432,32 @@ class SpringApplicationTests {
 			.run()
 			.getApplicationContext();
 		assertThatNoException().isThrownBy(() -> this.context.getBean(SingleUseAdditionalConfig.class));
+	}
+
+	@Test
+	void shouldStartDaemonThreadIfKeepAliveIsEnabled() {
+		SpringApplication application = new SpringApplication(ExampleConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		this.context = application.run("--spring.main.keep-alive=true");
+		Set<Thread> threads = getCurrentThreads();
+		assertThat(threads).filteredOn((thread) -> thread.getName().equals("keep-alive"))
+			.singleElement()
+			.satisfies((thread) -> assertThat(thread.isDaemon()).isFalse());
+	}
+
+	@Test
+	void shouldStopKeepAliveThreadIfContextIsClosed() {
+		SpringApplication application = new SpringApplication(ExampleConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		application.setKeepAlive(true);
+		this.context = application.run();
+		assertThat(getCurrentThreads()).filteredOn((thread) -> thread.getName().equals("keep-alive")).isNotEmpty();
+		this.context.close();
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(30))
+			.untilAsserted(
+					() -> assertThat(getCurrentThreads()).filteredOn((thread) -> thread.getName().equals("keep-alive"))
+						.isEmpty());
 	}
 
 	private <S extends AvailabilityState> ArgumentMatcher<ApplicationEvent> isAvailabilityChangeEventWithState(
@@ -1455,6 +1500,10 @@ class SpringApplicationTests {
 			}
 
 		};
+	}
+
+	private Set<Thread> getCurrentThreads() {
+		return Thread.getAllStackTraces().keySet();
 	}
 
 	static class TestEventListener<E extends ApplicationEvent> implements SmartApplicationListener {

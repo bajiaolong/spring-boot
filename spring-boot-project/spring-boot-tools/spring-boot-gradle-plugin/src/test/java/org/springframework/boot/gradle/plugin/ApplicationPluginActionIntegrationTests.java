@@ -195,7 +195,7 @@ class ApplicationPluginActionIntegrationTests {
 		List<String> entryNames = new ArrayList<>();
 		try (TarArchiveInputStream input = new TarArchiveInputStream(new FileInputStream(distribution))) {
 			TarArchiveEntry entry;
-			while ((entry = input.getNextTarEntry()) != null) {
+			while ((entry = input.getNextEntry()) != null) {
 				entryNames.add(entry.getName());
 			}
 		}
@@ -205,7 +205,7 @@ class ApplicationPluginActionIntegrationTests {
 	private void tarEntries(File distribution, Consumer<TarArchiveEntry> consumer) throws IOException {
 		try (TarArchiveInputStream input = new TarArchiveInputStream(new FileInputStream(distribution))) {
 			TarArchiveEntry entry;
-			while ((entry = input.getNextTarEntry()) != null) {
+			while ((entry = input.getNextEntry()) != null) {
 				consumer.accept(entry);
 			}
 		}

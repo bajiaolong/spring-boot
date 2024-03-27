@@ -32,7 +32,3 @@ bootWar {
 		)
 	}
 }
-
-bootBuildImage {
-	builder = "paketobuildpacks/builder-jammy-base:latest"
-}

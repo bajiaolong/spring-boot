@@ -139,7 +139,7 @@ final class PemPrivateKeyParser {
 		}
 		Assert.state(parameters.isType(ValueType.ENCODED), "Key spec should contain encoded parameters");
 		DerElement contents = DerElement.of(parameters.getContents());
-		Assert.state(contents.isType(ValueType.PRIMITIVE, TagType.OBJECT_IDENTIFIER),
+		Assert.state(contents != null && contents.isType(ValueType.PRIMITIVE, TagType.OBJECT_IDENTIFIER),
 				"Key spec parameters should contain object identifier");
 		return EncodedOid.of(contents);
 	}
@@ -184,36 +184,36 @@ final class PemPrivateKeyParser {
 
 	/**
 	 * Parse a private key from the specified string.
-	 * @param key the private key to parse
+	 * @param text the text to parse
 	 * @return the parsed private key
 	 */
-	static PrivateKey parse(String key) {
-		return parse(key, null);
+	static PrivateKey parse(String text) {
+		return parse(text, null);
 	}
 
 	/**
 	 * Parse a private key from the specified string, using the provided password for
 	 * decryption if necessary.
-	 * @param key the private key to parse
+	 * @param text the text to parse
 	 * @param password the password used to decrypt an encrypted private key
 	 * @return the parsed private key
 	 */
-	static PrivateKey parse(String key, String password) {
-		if (key == null) {
+	static PrivateKey parse(String text, String password) {
+		if (text == null) {
 			return null;
 		}
 		try {
 			for (PemParser pemParser : PEM_PARSERS) {
-				PrivateKey privateKey = pemParser.parse(key, password);
+				PrivateKey privateKey = pemParser.parse(text, password);
 				if (privateKey != null) {
 					return privateKey;
 				}
 			}
-			throw new IllegalStateException("Unrecognized private key format");
 		}
 		catch (Exception ex) {
 			throw new IllegalStateException("Error loading private key file: " + ex.getMessage(), ex);
 		}
+		throw new IllegalStateException("Missing private key or unrecognized format");
 	}
 
 	/**
@@ -287,10 +287,6 @@ final class PemPrivateKeyParser {
 
 		void octetString(byte[] bytes) throws IOException {
 			codeLengthBytes(0x04, bytes);
-		}
-
-		void sequence(int... elements) throws IOException {
-			sequence(bytes(elements));
 		}
 
 		void sequence(byte[] bytes) throws IOException {

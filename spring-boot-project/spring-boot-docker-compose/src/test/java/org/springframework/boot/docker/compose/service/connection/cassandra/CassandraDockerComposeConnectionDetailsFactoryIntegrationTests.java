@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,13 +42,13 @@ class CassandraDockerComposeConnectionDetailsFactoryIntegrationTests extends Abs
 	void runCreatesConnectionDetails() {
 		CassandraConnectionDetails connectionDetails = run(CassandraConnectionDetails.class);
 		List<Node> contactPoints = connectionDetails.getContactPoints();
-		assertThat(contactPoints.size()).isEqualTo(1);
+		assertThat(contactPoints).hasSize(1);
 		Node node = contactPoints.get(0);
 		assertThat(node.host()).isNotNull();
 		assertThat(node.port()).isGreaterThan(0);
 		assertThat(connectionDetails.getUsername()).isNull();
 		assertThat(connectionDetails.getPassword()).isNull();
-		assertThat(connectionDetails.getLocalDatacenter()).isEqualTo("dc1");
+		assertThat(connectionDetails.getLocalDatacenter()).isEqualTo("testdc1");
 	}
 
 }

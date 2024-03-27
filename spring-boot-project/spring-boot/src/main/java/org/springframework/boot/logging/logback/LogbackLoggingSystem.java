@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,7 @@ import org.springframework.aot.AotDetector;
 import org.springframework.beans.factory.aot.BeanFactoryInitializationAotContribution;
 import org.springframework.beans.factory.aot.BeanFactoryInitializationAotProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.io.ApplicationResourceLoader;
 import org.springframework.boot.logging.AbstractLoggingSystem;
 import org.springframework.boot.logging.LogFile;
 import org.springframework.boot.logging.LogLevel;
@@ -62,9 +63,9 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
-import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -111,7 +112,7 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 
 	@Override
 	public LoggingSystemProperties getSystemProperties(ConfigurableEnvironment environment) {
-		return new LogbackLoggingSystemProperties(environment);
+		return new LogbackLoggingSystemProperties(environment, getDefaultValueResolver(environment), null);
 	}
 
 	@Override
@@ -188,6 +189,7 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 		if (!initializeFromAotGeneratedArtifactsIfPossible(initializationContext, logFile)) {
 			super.initialize(initializationContext, configLocation, logFile);
 		}
+		loggerContext.putObject(Environment.class.getName(), initializationContext.getEnvironment());
 		loggerContext.getTurboFilterList().remove(FILTER);
 		markAsInitialized(loggerContext);
 		if (StringUtils.hasText(System.getProperty(CONFIGURATION_FILE_PROPERTY))) {
@@ -226,7 +228,8 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 			}
 			Environment environment = initializationContext.getEnvironment();
 			// Apply system properties directly in case the same JVM runs multiple apps
-			new LogbackLoggingSystemProperties(environment, context::putProperty).apply(logFile);
+			new LogbackLoggingSystemProperties(environment, getDefaultValueResolver(environment), context::putProperty)
+				.apply(logFile);
 			LogbackConfigurator configurator = debug ? new DebugLogbackConfigurator(context)
 					: new LogbackConfigurator(context);
 			new DefaultLogbackConfiguration(logFile).apply(configurator);
@@ -244,7 +247,8 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 				applySystemProperties(initializationContext.getEnvironment(), logFile);
 			}
 			try {
-				configureByResourceUrl(initializationContext, loggerContext, ResourceUtils.getURL(location));
+				Resource resource = new ApplicationResourceLoader().getResource(location);
+				configureByResourceUrl(initializationContext, loggerContext, resource.getURL());
 			}
 			catch (Exception ex) {
 				throw new IllegalStateException("Could not initialize Logback logging from " + location, ex);
@@ -410,7 +414,7 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 			}
 			catch (InterruptedException ex) {
 				Thread.currentThread().interrupt();
-				throw new IllegalStateException("Interrupted while waiting for non-subtitute logger factory", ex);
+				throw new IllegalStateException("Interrupted while waiting for non-substitute logger factory", ex);
 			}
 			factory = LoggerFactory.getILoggerFactory();
 		}
@@ -441,6 +445,11 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 
 	private void markAsUninitialized(LoggerContext loggerContext) {
 		loggerContext.removeObject(LoggingSystem.class.getName());
+	}
+
+	@Override
+	protected String getDefaultLogCorrelationPattern() {
+		return "%correlationId";
 	}
 
 	@Override

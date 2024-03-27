@@ -17,7 +17,9 @@
 package org.springframework.boot.actuate.autoconfigure.tracing;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import brave.Span;
@@ -31,6 +33,7 @@ import brave.propagation.CurrentTraceContext;
 import brave.propagation.CurrentTraceContext.ScopeDecorator;
 import brave.propagation.Propagation;
 import brave.propagation.Propagation.Factory;
+import brave.propagation.TraceContext;
 import brave.sampler.Sampler;
 import io.micrometer.tracing.brave.bridge.BraveBaggageManager;
 import io.micrometer.tracing.brave.bridge.BraveSpanCustomizer;
@@ -153,9 +156,28 @@ class BraveAutoConfigurationTests {
 	}
 
 	@Test
-	void shouldNotSupplyBeansIfTracingIsDisabled() {
-		this.contextRunner.withPropertyValues("management.tracing.enabled=false")
-			.run((context) -> assertThat(context).doesNotHaveBean(BraveAutoConfiguration.class));
+	void shouldUseB3SingleWithParentWhenPropagationTypeIsB3() {
+		this.contextRunner
+			.withPropertyValues("management.tracing.propagation.type=B3", "management.tracing.sampling.probability=1.0")
+			.run((context) -> {
+				Propagation<String> propagation = context.getBean(Factory.class).get();
+				Tracer tracer = context.getBean(Tracing.class).tracer();
+				Span child;
+				Span parent = tracer.nextSpan().name("parent");
+				try (Tracer.SpanInScope ignored = tracer.withSpanInScope(parent.start())) {
+					child = tracer.nextSpan().name("child");
+					child.start().finish();
+				}
+				finally {
+					parent.finish();
+				}
+
+				Map<String, String> map = new HashMap<>();
+				TraceContext childContext = child.context();
+				propagation.injector(this::injectToMap).inject(childContext, map);
+				assertThat(map).containsExactly(Map.entry("b3", "%s-%s-1-%s".formatted(childContext.traceIdString(),
+						childContext.spanIdString(), childContext.parentIdString())));
+			});
 	}
 
 	@Test
@@ -311,15 +333,39 @@ class BraveAutoConfigurationTests {
 				.getBean(CompositeSpanHandlerComponentsConfiguration.class);
 			CompositeSpanHandler composite = context.getBean(CompositeSpanHandler.class);
 			assertThat(composite).extracting("spanFilters")
-				.asList()
+				.asInstanceOf(InstanceOfAssertFactories.LIST)
 				.containsExactly(components.filter1, components.filter2);
 			assertThat(composite).extracting("filters")
-				.asList()
+				.asInstanceOf(InstanceOfAssertFactories.LIST)
 				.containsExactly(components.predicate2, components.predicate1);
 			assertThat(composite).extracting("reporters")
-				.asList()
+				.asInstanceOf(InstanceOfAssertFactories.LIST)
 				.containsExactly(components.reporter1, components.reporter3, components.reporter2);
 		});
+	}
+
+	@Test
+	void shouldDisablePropagationIfTracingIsDisabled() {
+		this.contextRunner.withPropertyValues("management.tracing.enabled=false").run((context) -> {
+			assertThat(context).hasSingleBean(Factory.class);
+			Factory factory = context.getBean(Factory.class);
+			Propagation<String> propagation = factory.get();
+			assertThat(propagation.keys()).isEmpty();
+		});
+	}
+
+	@Test
+	void shouldConfigureTaggedFields() {
+		this.contextRunner.withPropertyValues("management.tracing.baggage.tag-fields=t1").run((context) -> {
+			BraveTracer braveTracer = context.getBean(BraveTracer.class);
+			assertThat(braveTracer).extracting("braveBaggageManager.tagFields")
+				.asInstanceOf(InstanceOfAssertFactories.list(String.class))
+				.containsExactly("t1");
+		});
+	}
+
+	private void injectToMap(Map<String, String> map, String key, String value) {
+		map.put(key, value);
 	}
 
 	private List<Factory> getInjectors(Factory factory) {

@@ -44,7 +44,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.support.RouterFunctionMapping;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.socket.server.support.WebSocketHandlerMapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -86,6 +90,22 @@ class GraphQlWebMvcAutoConfigurationTests {
 				.andExpect(status().isOk())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_GRAPHQL_RESPONSE))
 				.andExpect(jsonPath("data.bookById.name").value("GraphQL for beginners"));
+		});
+	}
+
+	@Test
+	void SseSubscriptionShouldWork() {
+		testWith((mockMvc) -> {
+			String query = "{ booksOnSale(minPages: 50){ id name pageCount author } }";
+			mockMvc
+				.perform(post("/graphql").accept(MediaType.TEXT_EVENT_STREAM)
+					.content("{\"query\": \"subscription TestSubscription " + query + "\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(content().string(Matchers.stringContainsInOrder("event:next",
+						"data:{\"data\":{\"booksOnSale\":{\"id\":\"book-1\",\"name\":\"GraphQL for beginners\",\"pageCount\":100,\"author\":\"John GraphQL\"}}}",
+						"event:next",
+						"data:{\"data\":{\"booksOnSale\":{\"id\":\"book-2\",\"name\":\"Harry Potter and the Philosopher's Stone\",\"pageCount\":223,\"author\":\"Joanne Rowling\"}}}")));
 		});
 	}
 
@@ -156,8 +176,12 @@ class GraphQlWebMvcAutoConfigurationTests {
 
 	@Test
 	void shouldConfigureWebSocketBeans() {
-		this.contextRunner.withPropertyValues("spring.graphql.websocket.path=/ws")
-			.run((context) -> assertThat(context).hasSingleBean(GraphQlWebSocketHandler.class));
+		this.contextRunner.withPropertyValues("spring.graphql.websocket.path=/ws").run((context) -> {
+			assertThat(context).hasSingleBean(GraphQlWebSocketHandler.class);
+			assertThat(context.getBeanProvider(HandlerMapping.class).orderedStream().toList()).containsSubsequence(
+					context.getBean(WebSocketHandlerMapping.class), context.getBean(RouterFunctionMapping.class),
+					context.getBean(RequestMappingHandlerMapping.class));
+		});
 	}
 
 	@Test
@@ -199,8 +223,12 @@ class GraphQlWebMvcAutoConfigurationTests {
 
 		@Bean
 		RuntimeWiringConfigurer bookDataFetcher() {
-			return (builder) -> builder.type(TypeRuntimeWiring.newTypeWiring("Query")
-				.dataFetcher("bookById", GraphQlTestDataFetchers.getBookByIdDataFetcher()));
+			return (builder) -> {
+				builder.type(TypeRuntimeWiring.newTypeWiring("Query")
+					.dataFetcher("bookById", GraphQlTestDataFetchers.getBookByIdDataFetcher()));
+				builder.type(TypeRuntimeWiring.newTypeWiring("Subscription")
+					.dataFetcher("booksOnSale", GraphQlTestDataFetchers.getBooksOnSaleDataFetcher()));
+			};
 		}
 
 	}

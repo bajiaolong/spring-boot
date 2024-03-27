@@ -322,6 +322,12 @@
       "defaultValue": false
     },
     {
+      "name": "management.info.process.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable process info.",
+      "defaultValue": false
+    },
+    {
       "name": "management.metrics.binders.files.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether to enable files metrics.",
@@ -2000,10 +2006,18 @@
       }
     },
     {
+      "name": "management.metrics.web.client.request.metric-name",
+      "type": "java.lang.String",
+      "deprecation": {
+        "replacement": "management.observations.http.client.requests.name",
+        "level": "error"
+      }
+    },
+    {
       "name": "management.metrics.web.client.requests-metric-name",
       "type": "java.lang.String",
       "deprecation": {
-        "replacement": "management.metrics.web.client.request.metric-name",
+        "replacement": "management.observations.http.client.requests.name",
         "level": "error"
       }
     },
@@ -2050,12 +2064,30 @@
       }
     },
     {
+      "name": "management.metrics.web.server.request.metric-name",
+      "type": "java.lang.String",
+      "deprecation": {
+        "replacement": "management.observations.http.server.requests.name",
+        "level": "error"
+      }
+    },
+    {
       "name": "management.metrics.web.server.requests-metric-name",
       "type": "java.lang.String",
       "deprecation": {
-        "replacement": "management.metrics.web.server.request.metric-name",
+        "replacement": "management.observations.http.server.requests.name",
         "level": "error"
       }
+    },
+    {
+      "name": "management.observations.annotations.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether auto-configuration of Micrometer annotations is enabled.",
+      "defaultValue": false
+    },
+    {
+      "name": "management.otlp.metrics.export.base-time-unit",
+      "defaultValue": "milliseconds"
     },
     {
       "name": "management.otlp.tracing.compression",
@@ -2221,6 +2253,14 @@
       "defaultValue": [
         "W3C"
       ]
+    },
+    {
+      "name": "micrometer.observations.annotations.enabled",
+      "type": "java.lang.Boolean",
+      "deprecation": {
+        "level": "error",
+        "replacement": "management.observations.annotations.enabled"
+      }
     }
   ],
   "hints": [

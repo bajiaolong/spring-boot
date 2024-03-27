@@ -30,7 +30,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.websocket.DeploymentException;
 import jakarta.websocket.server.ServerContainer;
 import jakarta.websocket.server.ServerEndpoint;
-import org.eclipse.jetty.websocket.servlet.WebSocketUpgradeFilter;
+import org.eclipse.jetty.ee10.websocket.servlet.WebSocketUpgradeFilter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -43,7 +43,6 @@ import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testsupport.classpath.ForkedClassPath;
 import org.springframework.boot.testsupport.web.servlet.DirtiesUrlFactories;
-import org.springframework.boot.testsupport.web.servlet.Servlet5ClassPathOverrides;
 import org.springframework.boot.web.embedded.jetty.JettyServletWebServerFactory;
 import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
 import org.springframework.boot.web.server.WebServer;
@@ -107,7 +106,6 @@ class WebSocketServletAutoConfigurationTests {
 	}
 
 	@Test
-	@Servlet5ClassPathOverrides
 	void jettyWebSocketUpgradeFilterIsAddedToServletContextOfJettyServer() {
 		try (AnnotationConfigServletWebServerApplicationContext context = new AnnotationConfigServletWebServerApplicationContext(
 				JettyConfiguration.class, WebSocketServletAutoConfiguration.JettyWebSocketConfiguration.class)) {
@@ -142,7 +140,6 @@ class WebSocketServletAutoConfigurationTests {
 	}
 
 	@Test
-	@Servlet5ClassPathOverrides
 	void jettyWebSocketUpgradeFilterServletContextInitializerBacksOffWhenBeanWithSameNameIsDefined() {
 		try (AnnotationConfigServletWebServerApplicationContext context = new AnnotationConfigServletWebServerApplicationContext(
 				JettyConfiguration.class, CustomWebSocketUpgradeFilterServletContextInitializerConfiguration.class,
@@ -204,7 +201,6 @@ class WebSocketServletAutoConfigurationTests {
 
 	}
 
-	@Servlet5ClassPathOverrides
 	@Configuration(proxyBeanMethods = false)
 	static class JettyConfiguration extends CommonConfiguration {
 

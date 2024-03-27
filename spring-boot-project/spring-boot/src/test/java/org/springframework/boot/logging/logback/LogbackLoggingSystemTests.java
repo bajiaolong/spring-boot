@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.ILoggerFactory;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import org.springframework.beans.factory.aot.BeanFactoryInitializationAotContribution;
@@ -58,6 +59,7 @@ import org.springframework.boot.logging.LoggerConfiguration;
 import org.springframework.boot.logging.LoggingInitializationContext;
 import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.logging.LoggingSystemProperties;
+import org.springframework.boot.logging.LoggingSystemProperty;
 import org.springframework.boot.testsupport.classpath.ClassPathExclusions;
 import org.springframework.boot.testsupport.classpath.ClassPathOverrides;
 import org.springframework.boot.testsupport.system.CapturedOutput;
@@ -90,6 +92,7 @@ import static org.mockito.Mockito.times;
  * @author Robert Thornton
  * @author Eddú Meléndez
  * @author Scott Frederick
+ * @author Jonatan Ivanov
  * @author Moritz Halbritter
  */
 @ExtendWith(OutputCaptureExtension.class)
@@ -108,8 +111,9 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
 	@BeforeEach
 	void setup() {
-		System.getProperties().remove(LoggingSystemProperties.CONSOLE_LOG_CHARSET);
-		System.getProperties().remove(LoggingSystemProperties.FILE_LOG_CHARSET);
+		for (LoggingSystemProperty property : LoggingSystemProperty.values()) {
+			System.getProperties().remove(property.getEnvironmentVariableName());
+		}
 		this.systemPropertyNames = new HashSet<>(System.getProperties().keySet());
 		this.loggingSystem.cleanUp();
 		this.logger = ((LoggerContext) LoggerFactory.getILoggerFactory()).getLogger(getClass());
@@ -509,7 +513,7 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
 	@Test
 	void customExceptionConversionWord(CapturedOutput output) {
-		System.setProperty(LoggingSystemProperties.EXCEPTION_CONVERSION_WORD, "%ex");
+		System.setProperty(LoggingSystemProperty.EXCEPTION_CONVERSION_WORD.getEnvironmentVariableName(), "%ex");
 		try {
 			this.loggingSystem.beforeInitialize();
 			this.logger.info("Hidden");
@@ -520,7 +524,7 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 			assertThat(output).contains("java.lang.RuntimeException: Expected").doesNotContain("Wrapped by:");
 		}
 		finally {
-			System.clearProperty(LoggingSystemProperties.EXCEPTION_CONVERSION_WORD);
+			System.clearProperty(LoggingSystemProperty.EXCEPTION_CONVERSION_WORD.getEnvironmentVariableName());
 		}
 	}
 
@@ -531,7 +535,8 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 		this.logger.info("Hidden");
 		LogFile logFile = getLogFile(tmpDir() + "/example.log", null, false);
 		initialize(this.initializationContext, "classpath:logback-nondefault.xml", logFile);
-		assertThat(System.getProperty(LoggingSystemProperties.LOG_FILE)).endsWith("example.log");
+		assertThat(System.getProperty(LoggingSystemProperty.LOG_FILE.getEnvironmentVariableName()))
+			.endsWith("example.log");
 	}
 
 	@Test
@@ -550,6 +555,7 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 				(field) -> expectedProperties.add((String) field.get(null)), this::isPublicStaticFinal);
 		expectedProperties.removeAll(Arrays.asList("LOG_FILE", "LOG_PATH"));
 		expectedProperties.add("org.jboss.logging.provider");
+		expectedProperties.add("LOG_CORRELATION_PATTERN");
 		assertThat(properties).containsOnlyKeys(expectedProperties);
 		assertThat(properties).containsEntry("CONSOLE_LOG_CHARSET", Charset.defaultCharset().name());
 	}
@@ -683,6 +689,134 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 	}
 
 	@Test
+	void correlationLoggingToFileWhenExpectCorrelationIdTrueAndMdcContent() {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "true");
+		File file = new File(tmpDir(), "logback-test.log");
+		LogFile logFile = getLogFile(file.getPath(), null);
+		initialize(this.initializationContext, null, logFile);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(file, "Hello world"))
+			.contains(" [01234567890123456789012345678901-0123456789012345] ");
+	}
+
+	@Test
+	void correlationLoggingToConsoleWhenExpectCorrelationIdTrueAndMdcContent(CapturedOutput output) {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "true");
+		initialize(this.initializationContext, null, null);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world"))
+			.contains(" [01234567890123456789012345678901-0123456789012345] ");
+	}
+
+	@Test
+	void correlationLoggingToConsoleWhenExpectCorrelationIdFalseAndMdcContent(CapturedOutput output) {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "false");
+		initialize(this.initializationContext, null, null);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world")).doesNotContain("0123456789012345");
+	}
+
+	@Test
+	void correlationLoggingToConsoleWhenExpectCorrelationIdTrueAndNoMdcContent(CapturedOutput output) {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "true");
+		initialize(this.initializationContext, null, null);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world"))
+			.contains(" [                                                 ] ");
+	}
+
+	@Test
+	void correlationLoggingToConsoleWhenHasCorrelationPattern(CapturedOutput output) {
+		this.environment.setProperty("logging.pattern.correlation", "%correlationId{spanId(0),traceId(0)}");
+		initialize(this.initializationContext, null, null);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world"))
+			.contains(" [0123456789012345-01234567890123456789012345678901] ");
+	}
+
+	@Test
+	void correlationLoggingToConsoleWhenUsingXmlConfiguration(CapturedOutput output) {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "true");
+		initialize(this.initializationContext, "classpath:logback-include-base.xml", null);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world"))
+			.contains(" [01234567890123456789012345678901-0123456789012345] ");
+	}
+
+	@Test
+	void correlationLoggingToFileWhenUsingFileConfiguration() {
+		this.environment.setProperty(LoggingSystem.EXPECT_CORRELATION_ID_PROPERTY, "true");
+		File file = new File(tmpDir(), "logback-test.log");
+		LogFile logFile = getLogFile(file.getPath(), null);
+		initialize(this.initializationContext, "classpath:logback-include-base.xml", logFile);
+		MDC.setContextMap(Map.of("traceId", "01234567890123456789012345678901", "spanId", "0123456789012345"));
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(file, "Hello world"))
+			.contains(" [01234567890123456789012345678901-0123456789012345] ");
+	}
+
+	@Test
+	void applicationNameLoggingToConsoleWhenHasApplicationName(CapturedOutput output) {
+		this.environment.setProperty("spring.application.name", "myapp");
+		initialize(this.initializationContext, null, null);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world")).contains("[myapp] ");
+	}
+
+	@Test
+	void applicationNameLoggingToConsoleWhenHasApplicationNameWithParenthesis(CapturedOutput output) {
+		this.environment.setProperty("spring.application.name", "myapp (dev)");
+		initialize(this.initializationContext, null, null);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world")).contains("[myapp (dev)] ");
+	}
+
+	@Test
+	void applicationNameLoggingToConsoleWhenDisabled(CapturedOutput output) {
+		this.environment.setProperty("spring.application.name", "myapp");
+		this.environment.setProperty("logging.include-application-name", "false");
+		initialize(this.initializationContext, null, null);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(output, "Hello world")).doesNotContain("myapp").doesNotContain("null");
+	}
+
+	@Test
+	void applicationNameLoggingToFileWhenHasApplicationName() {
+		this.environment.setProperty("spring.application.name", "myapp");
+		File file = new File(tmpDir(), "logback-test.log");
+		LogFile logFile = getLogFile(file.getPath(), null);
+		initialize(this.initializationContext, null, logFile);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(file, "Hello world")).contains("[myapp] ");
+	}
+
+	@Test
+	void applicationNameLoggingToFileWhenHasApplicationNameWithParenthesis() {
+		this.environment.setProperty("spring.application.name", "myapp (dev)");
+		File file = new File(tmpDir(), "logback-test.log");
+		LogFile logFile = getLogFile(file.getPath(), null);
+		initialize(this.initializationContext, null, logFile);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(file, "Hello world")).contains("[myapp (dev)] ");
+	}
+
+	@Test
+	void applicationNameLoggingToFileWhenDisabled(CapturedOutput output) {
+		this.environment.setProperty("spring.application.name", "myapp");
+		this.environment.setProperty("logging.include-application-name", "false");
+		File file = new File(tmpDir(), "logback-test.log");
+		LogFile logFile = getLogFile(file.getPath(), null);
+		initialize(this.initializationContext, null, logFile);
+		this.logger.info("Hello world");
+		assertThat(getLineWithText(file, "Hello world")).doesNotContain("myapp").doesNotContain("null");
+	}
+
+	@Test
 	void whenConfigurationErrorIsDetectedUnderlyingCausesAreIncludedAsSuppressedExceptions() {
 		this.loggingSystem.beforeInitialize();
 		assertThatIllegalStateException()
@@ -745,6 +879,7 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
 	private void initialize(LoggingInitializationContext context, String configLocation, LogFile logFile) {
 		this.loggingSystem.getSystemProperties((ConfigurableEnvironment) context.getEnvironment()).apply(logFile);
+		this.loggingSystem.beforeInitialize();
 		this.loggingSystem.initialize(context, configLocation, logFile);
 	}
 
@@ -764,17 +899,6 @@ class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
 	private static SizeAndTimeBasedRollingPolicy<?> getRollingPolicy() {
 		return (SizeAndTimeBasedRollingPolicy<?>) getFileAppender().getRollingPolicy();
-	}
-
-	private String getLineWithText(File file, CharSequence outputSearch) {
-		return getLineWithText(contentOf(file), outputSearch);
-	}
-
-	private String getLineWithText(CharSequence output, CharSequence outputSearch) {
-		return Arrays.stream(output.toString().split("\\r?\\n"))
-			.filter((line) -> line.contains(outputSearch))
-			.findFirst()
-			.orElse(null);
 	}
 
 }

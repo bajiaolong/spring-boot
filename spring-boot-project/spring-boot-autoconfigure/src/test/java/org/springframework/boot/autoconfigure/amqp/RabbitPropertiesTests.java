@@ -16,6 +16,7 @@
 
 package org.springframework.boot.autoconfigure.amqp;
 
+import com.rabbitmq.client.ConnectionFactory;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.amqp.rabbit.config.DirectRabbitListenerContainerFactory;
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  * @author Andy Wilkinson
  * @author Stephane Nicoll
  * @author Rafael Carvalho
+ * @author Scott Frederick
  */
 class RabbitPropertiesTests {
 
@@ -321,6 +323,19 @@ class RabbitPropertiesTests {
 	}
 
 	@Test
+	void determineSslEnabledIsTrueWhenBundleIsSetAndNoAddresses() {
+		this.properties.getSsl().setBundle("test");
+		assertThat(this.properties.getSsl().determineEnabled()).isTrue();
+	}
+
+	@Test
+	void propertiesUseConsistentDefaultValues() {
+		ConnectionFactory connectionFactory = new ConnectionFactory();
+		assertThat(connectionFactory).hasFieldOrPropertyWithValue("maxInboundMessageBodySize",
+				(int) this.properties.getMaxInboundMessageBodySize().toBytes());
+	}
+
+	@Test
 	void simpleContainerUseConsistentDefaultValues() {
 		SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
 		SimpleMessageListenerContainer container = factory.createListenerContainer();
@@ -329,6 +344,7 @@ class RabbitPropertiesTests {
 		assertThat(container).hasFieldOrPropertyWithValue("missingQueuesFatal", simple.isMissingQueuesFatal());
 		assertThat(container).hasFieldOrPropertyWithValue("deBatchingEnabled", simple.isDeBatchingEnabled());
 		assertThat(container).hasFieldOrPropertyWithValue("consumerBatchEnabled", simple.isConsumerBatchEnabled());
+		assertThat(container).hasFieldOrPropertyWithValue("forceStop", simple.isForceStop());
 	}
 
 	@Test
@@ -339,6 +355,7 @@ class RabbitPropertiesTests {
 		assertThat(direct.isAutoStartup()).isEqualTo(container.isAutoStartup());
 		assertThat(container).hasFieldOrPropertyWithValue("missingQueuesFatal", direct.isMissingQueuesFatal());
 		assertThat(container).hasFieldOrPropertyWithValue("deBatchingEnabled", direct.isDeBatchingEnabled());
+		assertThat(container).hasFieldOrPropertyWithValue("forceStop", direct.isForceStop());
 	}
 
 	@Test

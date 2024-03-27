@@ -58,10 +58,10 @@ class TarArchiveTests {
 		try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
 				new ByteArrayInputStream(outputStream.toByteArray()))) {
 			List<TarArchiveEntry> entries = new ArrayList<>();
-			TarArchiveEntry entry = tarStream.getNextTarEntry();
+			TarArchiveEntry entry = tarStream.getNextEntry();
 			while (entry != null) {
 				entries.add(entry);
-				entry = tarStream.getNextTarEntry();
+				entry = tarStream.getNextEntry();
 			}
 			assertThat(entries).hasSize(6);
 			assertThat(entries.get(0).getName()).isEqualTo("/workspace/");

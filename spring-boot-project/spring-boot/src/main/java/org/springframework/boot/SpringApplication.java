@@ -17,6 +17,7 @@
 package org.springframework.boot;
 
 import java.lang.StackWalker.StackFrame;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,10 +35,12 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.crac.management.CRaCMXBean;
 
 import org.springframework.aot.AotDetector;
 import org.springframework.beans.BeansException;
@@ -71,6 +74,9 @@ import org.springframework.context.annotation.AnnotationConfigUtils;
 import org.springframework.context.annotation.ClassPathBeanDefinitionScanner;
 import org.springframework.context.annotation.ConfigurationClassPostProcessor;
 import org.springframework.context.aot.AotApplicationContextInitializer;
+import org.springframework.context.event.ApplicationContextEvent;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.GenericTypeResolver;
@@ -170,8 +176,10 @@ import org.springframework.util.function.ThrowingSupplier;
  * @author Brian Clozel
  * @author Ethan Rubinson
  * @author Chris Bono
+ * @author Moritz Halbritter
  * @author Tadaya Tsuyukubo
  * @author Lasse Wulff
+ * @author Yanming Zhou
  * @since 1.0.0
  * @see #run(Class, String[])
  * @see #run(Class[], String[])
@@ -249,6 +257,8 @@ public class SpringApplication {
 
 	private ApplicationStartup applicationStartup = ApplicationStartup.DEFAULT;
 
+	private boolean keepAlive;
+
 	/**
 	 * Create a new {@link SpringApplication} instance. The application context will load
 	 * beans from the specified primary sources (see {@link SpringApplication class-level}
@@ -305,10 +315,10 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
+		Startup startup = Startup.create();
 		if (this.registerShutdownHook) {
 			SpringApplication.shutdownHook.enableShutdownHookAddition();
 		}
-		long startTime = System.nanoTime();
 		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
 		ConfigurableApplicationContext context = null;
 		configureHeadlessProperty();
@@ -323,11 +333,11 @@ public class SpringApplication {
 			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner);
 			refreshContext(context);
 			afterRefresh(context, applicationArguments);
-			Duration timeTakenToStartup = Duration.ofNanos(System.nanoTime() - startTime);
+			startup.started();
 			if (this.logStartupInfo) {
-				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), timeTakenToStartup);
+				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), startup);
 			}
-			listeners.started(context, timeTakenToStartup);
+			listeners.started(context, startup.timeTakenToStarted());
 			callRunners(context, applicationArguments);
 		}
 		catch (Throwable ex) {
@@ -335,8 +345,7 @@ public class SpringApplication {
 		}
 		try {
 			if (context.isRunning()) {
-				Duration timeTakenToReady = Duration.ofNanos(System.nanoTime() - startTime);
-				listeners.ready(context, timeTakenToReady);
+				listeners.ready(context, startup.ready());
 			}
 		}
 		catch (Throwable ex) {
@@ -410,6 +419,9 @@ public class SpringApplication {
 		if (this.lazyInitialization) {
 			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 		}
+		if (this.keepAlive) {
+			context.addApplicationListener(new KeepAlive());
+		}
 		context.addBeanFactoryPostProcessor(new PropertySourceOrderingBeanFactoryPostProcessor(context));
 		if (!AotDetector.useGeneratedArtifacts()) {
 			// Load the sources
@@ -426,6 +438,10 @@ public class SpringApplication {
 					initializers.stream().filter(AotApplicationContextInitializer.class::isInstance).toList());
 			if (aotInitializers.isEmpty()) {
 				String initializerClassName = this.mainApplicationClass.getName() + "__ApplicationContextInitializer";
+				Assert.state(ClassUtils.isPresent(initializerClassName, getClassLoader()),
+						"You are starting the application with AOT mode enabled but AOT processing hasn't happened. "
+								+ "Please build your application with enabled AOT processing first, "
+								+ "or remove the system property 'spring.aot.enabled' to run the application in regular mode");
 				aotInitializers.add(AotApplicationContextInitializer.forInitializerClasses(initializerClassName));
 			}
 			initializers.removeAll(aotInitializers);
@@ -1286,6 +1302,27 @@ public class SpringApplication {
 	}
 
 	/**
+	 * Whether to keep the application alive even if there are no more non-daemon threads.
+	 * @return whether to keep the application alive even if there are no more non-daemon
+	 * threads
+	 * @since 3.2.0
+	 */
+	public boolean isKeepAlive() {
+		return this.keepAlive;
+	}
+
+	/**
+	 * Set whether to keep the application alive even if there are no more non-daemon
+	 * threads.
+	 * @param keepAlive whether to keep the application alive even if there are no more
+	 * non-daemon threads
+	 * @since 3.2.0
+	 */
+	public void setKeepAlive(boolean keepAlive) {
+		this.keepAlive = keepAlive;
+	}
+
+	/**
 	 * Return a {@link SpringApplicationShutdownHandlers} instance that can be used to add
 	 * or remove handlers that perform actions before the JVM is shutdown.
 	 * @return a {@link SpringApplicationShutdownHandlers} instance
@@ -1592,6 +1629,9 @@ public class SpringApplication {
 
 	}
 
+	/**
+	 * {@link SpringApplicationHook} decorator that ensures the hook is only used once.
+	 */
 	private static final class SingleUseSpringApplicationHook implements SpringApplicationHook {
 
 		private final AtomicBoolean used = new AtomicBoolean();
@@ -1605,6 +1645,148 @@ public class SpringApplication {
 		@Override
 		public SpringApplicationRunListener getRunListener(SpringApplication springApplication) {
 			return this.used.compareAndSet(false, true) ? this.delegate.getRunListener(springApplication) : null;
+		}
+
+	}
+
+	/**
+	 * Starts a non-daemon thread to keep the JVM alive on {@link ContextRefreshedEvent}.
+	 * Stops the thread on {@link ContextClosedEvent}.
+	 */
+	private static final class KeepAlive implements ApplicationListener<ApplicationContextEvent> {
+
+		private final AtomicReference<Thread> thread = new AtomicReference<>();
+
+		@Override
+		public void onApplicationEvent(ApplicationContextEvent event) {
+			if (event instanceof ContextRefreshedEvent) {
+				startKeepAliveThread();
+			}
+			else if (event instanceof ContextClosedEvent) {
+				stopKeepAliveThread();
+			}
+		}
+
+		private void startKeepAliveThread() {
+			Thread thread = new Thread(() -> {
+				while (true) {
+					try {
+						Thread.sleep(Long.MAX_VALUE);
+					}
+					catch (InterruptedException ex) {
+						break;
+					}
+				}
+			});
+			if (this.thread.compareAndSet(null, thread)) {
+				thread.setDaemon(false);
+				thread.setName("keep-alive");
+				thread.start();
+			}
+		}
+
+		private void stopKeepAliveThread() {
+			Thread thread = this.thread.getAndSet(null);
+			if (thread == null) {
+				return;
+			}
+			thread.interrupt();
+		}
+
+	}
+
+	/**
+	 * Strategy used to handle startup concerns.
+	 */
+	abstract static class Startup {
+
+		private Duration timeTakenToStarted;
+
+		protected abstract long startTime();
+
+		protected abstract Long processUptime();
+
+		protected abstract String action();
+
+		final Duration started() {
+			long now = System.currentTimeMillis();
+			this.timeTakenToStarted = Duration.ofMillis(now - startTime());
+			return this.timeTakenToStarted;
+		}
+
+		Duration timeTakenToStarted() {
+			return this.timeTakenToStarted;
+		}
+
+		private Duration ready() {
+			long now = System.currentTimeMillis();
+			return Duration.ofMillis(now - startTime());
+		}
+
+		static Startup create() {
+			ClassLoader classLoader = Startup.class.getClassLoader();
+			return (ClassUtils.isPresent("jdk.crac.management.CRaCMXBean", classLoader)
+					&& ClassUtils.isPresent("org.crac.management.CRaCMXBean", classLoader))
+							? new CoordinatedRestoreAtCheckpointStartup() : new StandardStartup();
+		}
+
+	}
+
+	/**
+	 * Standard {@link Startup} implementation.
+	 */
+	private static final class StandardStartup extends Startup {
+
+		private final Long startTime = System.currentTimeMillis();
+
+		@Override
+		protected long startTime() {
+			return this.startTime;
+		}
+
+		@Override
+		protected Long processUptime() {
+			try {
+				return ManagementFactory.getRuntimeMXBean().getUptime();
+			}
+			catch (Throwable ex) {
+				return null;
+			}
+		}
+
+		@Override
+		protected String action() {
+			return "Started";
+		}
+
+	}
+
+	/**
+	 * Coordinated-Restore-At-Checkpoint {@link Startup} implementation.
+	 */
+	private static final class CoordinatedRestoreAtCheckpointStartup extends Startup {
+
+		private final StandardStartup fallback = new StandardStartup();
+
+		@Override
+		protected Long processUptime() {
+			long uptime = CRaCMXBean.getCRaCMXBean().getUptimeSinceRestore();
+			return (uptime >= 0) ? uptime : this.fallback.processUptime();
+		}
+
+		@Override
+		protected String action() {
+			return (restoreTime() >= 0) ? "Restored" : this.fallback.action();
+		}
+
+		private long restoreTime() {
+			return CRaCMXBean.getCRaCMXBean().getRestoreTime();
+		}
+
+		@Override
+		protected long startTime() {
+			long restoreTime = restoreTime();
+			return (restoreTime >= 0) ? restoreTime : this.fallback.startTime();
 		}
 
 	}

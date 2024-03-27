@@ -215,10 +215,10 @@ class ImageBuildpackTests extends AbstractJsonTests {
 		byte[] content = layers.get(0).toByteArray();
 		List<TarArchiveEntry> entries = new ArrayList<>();
 		try (TarArchiveInputStream tar = new TarArchiveInputStream(new ByteArrayInputStream(content))) {
-			TarArchiveEntry entry = tar.getNextTarEntry();
+			TarArchiveEntry entry = tar.getNextEntry();
 			while (entry != null) {
 				entries.add(entry);
-				entry = tar.getNextTarEntry();
+				entry = tar.getNextEntry();
 			}
 		}
 		assertThat(entries).extracting("name", "mode")

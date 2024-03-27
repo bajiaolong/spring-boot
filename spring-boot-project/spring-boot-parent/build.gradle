@@ -30,11 +30,11 @@ bom {
 	library("C3P0", "0.9.5.5") {
 		group("com.mchange") {
 			modules = [
-					"c3p0"
+				"c3p0"
 			]
 		}
 	}
-	library("Commons Compress", "1.21") {
+	library("Commons Compress", "1.25.0") {
 		group("org.apache.commons") {
 			modules = [
 				"commons-compress"
@@ -48,10 +48,10 @@ bom {
 			]
 		}
 	}
-	library("Jakarta Inject", "2.0.1") {
-		group("jakarta.inject") {
+	library("CycloneDX Gradle Plugin", "1.8.2") {
+		group("org.cyclonedx") {
 			modules = [
-				"jakarta.inject-api"
+				"cyclonedx-gradle-plugin"
 			]
 		}
 	}
@@ -73,7 +73,7 @@ bom {
 			]
 		}
 	}
-	library("JNA", "5.7.0") {
+	library("JNA", "5.13.0") {
 		group("net.java.dev.jna") {
 			modules = [
 				"jna-platform"
@@ -97,7 +97,7 @@ bom {
 			]
 		}
 	}
-	library("Maven Common Artifact Filters", "3.2.0") {
+	library("Maven Common Artifact Filters", "3.3.2") {
 		group("org.apache.maven.shared") {
 			modules = [
 				"maven-common-artifact-filters"
@@ -111,7 +111,7 @@ bom {
 			]
 		}
 	}
-	library("Maven Plugin Tools", "3.6.0") {
+	library("Maven Plugin Tools", "3.9.0") {
 		group("org.apache.maven.plugin-tools") {
 			modules = [
 				"maven-plugin-annotations"
@@ -131,10 +131,17 @@ bom {
 			]
 		}
 	}
-	library("Maven Shade Plugin", "3.2.4") {
+	library("Maven Shade Plugin", "3.5.0") {
 		group("org.apache.maven.plugins") {
 			modules = [
 				"maven-shade-plugin"
+			]
+		}
+	}
+	library("Micrometer Context Propagation", "1.0.5") {
+		group("io.micrometer") {
+			modules = [
+				"context-propagation"
 			]
 		}
 	}
@@ -191,14 +198,6 @@ bom {
 		group("org.testng") {
 			modules = [
 				"testng"
-			]
-		}
-	}
-	library("Spring Asciidoctor Extensions", "0.6.3") {
-		group("io.spring.asciidoctor") {
-			modules = [
-				"spring-asciidoctor-extensions-spring-boot",
-				"spring-asciidoctor-extensions-section-ids"
 			]
 		}
 	}

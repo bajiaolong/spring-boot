@@ -39,7 +39,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.hc.core5.net.URIBuilder;
 
-import org.springframework.boot.buildpack.platform.docker.configuration.DockerHost;
+import org.springframework.boot.buildpack.platform.docker.configuration.DockerConfiguration.DockerHostConfiguration;
 import org.springframework.boot.buildpack.platform.docker.transport.HttpTransport;
 import org.springframework.boot.buildpack.platform.docker.transport.HttpTransport.Response;
 import org.springframework.boot.buildpack.platform.docker.type.ContainerConfig;
@@ -96,7 +96,7 @@ public class DockerApi {
 	 * @param dockerHost the Docker daemon host information
 	 * @since 2.4.0
 	 */
-	public DockerApi(DockerHost dockerHost) {
+	public DockerApi(DockerHostConfiguration dockerHost) {
 		this(HttpTransport.create(dockerHost));
 	}
 
@@ -295,14 +295,14 @@ public class DockerApi {
 			Path exportFile = copyToTemp(response.getContent());
 			ImageArchiveManifest manifest = getManifest(reference, exportFile);
 			try (TarArchiveInputStream tar = new TarArchiveInputStream(new FileInputStream(exportFile.toFile()))) {
-				TarArchiveEntry entry = tar.getNextTarEntry();
+				TarArchiveEntry entry = tar.getNextEntry();
 				while (entry != null) {
 					if (manifestContainsLayerEntry(manifest, entry.getName())) {
 						Path layerFile = copyToTemp(tar);
 						exports.accept(entry.getName(), layerFile);
 						Files.delete(layerFile);
 					}
-					entry = tar.getNextTarEntry();
+					entry = tar.getNextEntry();
 				}
 			}
 			Files.delete(exportFile);
@@ -347,12 +347,12 @@ public class DockerApi {
 
 		private ImageArchiveManifest getManifest(ImageReference reference, Path exportFile) throws IOException {
 			try (TarArchiveInputStream tar = new TarArchiveInputStream(new FileInputStream(exportFile.toFile()))) {
-				TarArchiveEntry entry = tar.getNextTarEntry();
+				TarArchiveEntry entry = tar.getNextEntry();
 				while (entry != null) {
 					if (entry.getName().equals("manifest.json")) {
 						return readManifest(tar);
 					}
-					entry = tar.getNextTarEntry();
+					entry = tar.getNextEntry();
 				}
 			}
 			throw new IllegalArgumentException("Manifest not found in image " + reference);

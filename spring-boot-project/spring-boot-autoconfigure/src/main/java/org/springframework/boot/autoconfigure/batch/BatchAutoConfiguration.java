@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import org.springframework.batch.core.configuration.annotation.EnableBatchProces
 import org.springframework.batch.core.configuration.support.DefaultBatchConfiguration;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.repository.ExecutionContextSerializer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ExitCodeGenerator;
@@ -62,6 +63,8 @@ import org.springframework.util.StringUtils;
  * @author Eddú Meléndez
  * @author Kazuki Shimizu
  * @author Mahmoud Ben Hassine
+ * @author Lars Uffmann
+ * @author Lasse Wulff
  * @since 1.0.0
  */
 @AutoConfiguration(after = { HibernateJpaAutoConfiguration.class, TransactionAutoConfiguration.class })
@@ -102,13 +105,19 @@ public class BatchAutoConfiguration {
 
 		private final List<BatchConversionServiceCustomizer> batchConversionServiceCustomizers;
 
+		private final ExecutionContextSerializer executionContextSerializer;
+
 		SpringBootBatchConfiguration(DataSource dataSource, @BatchDataSource ObjectProvider<DataSource> batchDataSource,
-				PlatformTransactionManager transactionManager, BatchProperties properties,
-				ObjectProvider<BatchConversionServiceCustomizer> batchConversionServiceCustomizers) {
+				PlatformTransactionManager transactionManager,
+				@BatchTransactionManager ObjectProvider<PlatformTransactionManager> batchTransactionManager,
+				BatchProperties properties,
+				ObjectProvider<BatchConversionServiceCustomizer> batchConversionServiceCustomizers,
+				ObjectProvider<ExecutionContextSerializer> executionContextSerializer) {
 			this.dataSource = batchDataSource.getIfAvailable(() -> dataSource);
-			this.transactionManager = transactionManager;
+			this.transactionManager = batchTransactionManager.getIfAvailable(() -> transactionManager);
 			this.properties = properties;
 			this.batchConversionServiceCustomizers = batchConversionServiceCustomizers.orderedStream().toList();
+			this.executionContextSerializer = executionContextSerializer.getIfAvailable();
 		}
 
 		@Override
@@ -140,6 +149,12 @@ public class BatchAutoConfiguration {
 				customizer.customize(conversionService);
 			}
 			return conversionService;
+		}
+
+		@Override
+		protected ExecutionContextSerializer getExecutionContextSerializer() {
+			return (this.executionContextSerializer != null) ? this.executionContextSerializer
+					: super.getExecutionContextSerializer();
 		}
 
 	}

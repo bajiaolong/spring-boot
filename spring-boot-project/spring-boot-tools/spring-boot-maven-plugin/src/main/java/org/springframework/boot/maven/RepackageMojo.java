@@ -36,6 +36,7 @@ import org.springframework.boot.loader.tools.DefaultLaunchScript;
 import org.springframework.boot.loader.tools.LaunchScript;
 import org.springframework.boot.loader.tools.LayoutFactory;
 import org.springframework.boot.loader.tools.Libraries;
+import org.springframework.boot.loader.tools.LoaderImplementation;
 import org.springframework.boot.loader.tools.Repackager;
 
 /**
@@ -106,7 +107,7 @@ public class RepackageMojo extends AbstractPackagerMojo {
 	private boolean attach = true;
 
 	/**
-	 * A list of the libraries that must be unpacked from fat jars in order to run.
+	 * A list of the libraries that must be unpacked from uber jars in order to run.
 	 * Specify each library as a {@code <dependency>} with a {@code <groupId>} and a
 	 * {@code <artifactId>} and they will be unpacked at runtime.
 	 * @since 1.1.0
@@ -162,6 +163,13 @@ public class RepackageMojo extends AbstractPackagerMojo {
 	private LayoutType layout;
 
 	/**
+	 * The loader implementation that should be used.
+	 * @since 3.2.0
+	 */
+	@Parameter
+	private LoaderImplementation loaderImplementation;
+
+	/**
 	 * The layout factory that will be used to create the executable archive if no
 	 * explicit layout is set. Alternative layouts implementations can be provided by 3rd
 	 * parties.
@@ -178,6 +186,11 @@ public class RepackageMojo extends AbstractPackagerMojo {
 	@Override
 	protected LayoutType getLayout() {
 		return this.layout;
+	}
+
+	@Override
+	protected LoaderImplementation getLoaderImplementation() {
+		return this.loaderImplementation;
 	}
 
 	/**

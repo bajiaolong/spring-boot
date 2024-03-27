@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -82,6 +83,7 @@ import org.springframework.core.convert.converter.GenericConverter;
 import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.core.io.ClassPathResource;
@@ -646,24 +648,85 @@ class ConfigurationPropertiesTests {
 
 	@Test
 	void loadShouldUseConverterBean() {
-		prepareConverterContext(ConverterConfiguration.class, PersonProperties.class);
+		prepareConverterContext(PersonConverterConfiguration.class, PersonProperties.class);
 		Person person = this.context.getBean(PersonProperties.class).getPerson();
 		assertThat(person.firstName).isEqualTo("John");
 		assertThat(person.lastName).isEqualTo("Smith");
 	}
 
 	@Test
-	void loadWhenBeanFactoryConversionServiceAndConverterBean() {
+	void loadShouldUseStringConverterBeanWhenValueIsCharSequence() {
+		this.context.register(PersonConverterConfiguration.class, PersonProperties.class);
+		PropertySource<?> testProperties = new MapPropertySource("test", Map.of("test.person", new CharSequence() {
+
+			private final String value = "John Smith";
+
+			@Override
+			public int length() {
+				return this.value.length();
+			}
+
+			@Override
+			public char charAt(int index) {
+				return this.value.charAt(index);
+			}
+
+			@Override
+			public CharSequence subSequence(int start, int end) {
+				return this.value.subSequence(start, end);
+			}
+
+			@Override
+			public String toString() {
+				return this.value;
+			}
+
+		}));
+		this.context.getEnvironment().getPropertySources().addLast(testProperties);
+		this.context.refresh();
+		Person person = this.context.getBean(PersonProperties.class).getPerson();
+		assertThat(person.firstName).isEqualTo("John");
+		assertThat(person.lastName).isEqualTo("Smith");
+	}
+
+	@Test
+	void loadWhenBeanFactoryConversionServiceAndConverterBeanCanUseBeanFactoryConverter() {
 		DefaultConversionService conversionService = new DefaultConversionService();
 		conversionService.addConverter(new AlienConverter());
 		this.context.getBeanFactory().setConversionService(conversionService);
-		load(new Class<?>[] { ConverterConfiguration.class, PersonAndAlienProperties.class }, "test.person=John Smith",
-				"test.alien=Alf Tanner");
+		load(new Class<?>[] { PersonConverterConfiguration.class, PersonAndAlienProperties.class },
+				"test.person=John Smith", "test.alien=Alf Tanner");
 		PersonAndAlienProperties properties = this.context.getBean(PersonAndAlienProperties.class);
 		assertThat(properties.getPerson().firstName).isEqualTo("John");
 		assertThat(properties.getPerson().lastName).isEqualTo("Smith");
-		assertThat(properties.getAlien().firstName).isEqualTo("Alf");
-		assertThat(properties.getAlien().lastName).isEqualTo("Tanner");
+		assertThat(properties.getAlien().name).isEqualTo("rennaT flA");
+	}
+
+	@Test
+	void loadWhenBeanFactoryConversionServiceAndConverterBeanCanUseConverterBean() {
+		DefaultConversionService conversionService = new DefaultConversionService();
+		conversionService.addConverter(new PersonConverter());
+		this.context.getBeanFactory().setConversionService(conversionService);
+		load(new Class<?>[] { AlienConverterConfiguration.class, PersonAndAlienProperties.class },
+				"test.person=John Smith", "test.alien=Alf Tanner");
+		PersonAndAlienProperties properties = this.context.getBean(PersonAndAlienProperties.class);
+		assertThat(properties.getPerson().firstName).isEqualTo("John");
+		assertThat(properties.getPerson().lastName).isEqualTo("Smith");
+		assertThat(properties.getAlien().name).isEqualTo("rennaT flA");
+	}
+
+	@Test // gh-38734
+	void loadWhenBeanFactoryConversionServiceAndConverterBeanCanUseConverterBeanWithCollections() {
+		DefaultConversionService conversionService = new DefaultConversionService();
+		conversionService.addConverter(new PersonConverter());
+		this.context.getBeanFactory().setConversionService(conversionService);
+		load(new Class<?>[] { AlienConverterConfiguration.class, PersonAndAliensProperties.class },
+				"test.person=John Smith", "test.aliens=Alf Tanner,Gilbert");
+		PersonAndAliensProperties properties = this.context.getBean(PersonAndAliensProperties.class);
+		assertThat(properties.getPerson().firstName).isEqualTo("John");
+		assertThat(properties.getPerson().lastName).isEqualTo("Smith");
+		assertThat(properties.getAliens().get(0).name).isEqualTo("rennaT flA");
+		assertThat(properties.getAliens().get(1).name).isEqualTo("trebliG");
 	}
 
 	@Test
@@ -1158,6 +1221,22 @@ class ConfigurationPropertiesTests {
 	}
 
 	@Test
+	void loadWhenBindingClasspathPatternToResourceArrayShouldBindMultipleValues() {
+		load(ResourceArrayPropertiesConfiguration.class,
+				"test.resources=classpath*:org/springframework/boot/context/properties/*.class");
+		ResourceArrayProperties properties = this.context.getBean(ResourceArrayProperties.class);
+		assertThat(properties.getResources()).hasSizeGreaterThan(1);
+	}
+
+	@Test
+	void loadWhenBindingClasspathPatternToResourceCollectionShouldBindMultipleValues() {
+		load(ResourceCollectionPropertiesConfiguration.class,
+				"test.resources=classpath*:org/springframework/boot/context/properties/*.class");
+		ResourceCollectionProperties properties = this.context.getBean(ResourceCollectionProperties.class);
+		assertThat(properties.getResources()).hasSizeGreaterThan(1);
+	}
+
+	@Test
 	void loadWhenBindingToConstructorParametersWithConversionToCustomListImplementation() {
 		load(ConstructorBoundCustomListPropertiesConfiguration.class, "test.values=a,b");
 		assertThat(this.context.getBean(ConstructorBoundCustomListProperties.class).getValues()).containsExactly("a",
@@ -1458,12 +1537,23 @@ class ConfigurationPropertiesTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	static class ConverterConfiguration {
+	static class PersonConverterConfiguration {
 
 		@Bean
 		@ConfigurationPropertiesBinding
 		Converter<String, Person> personConverter() {
 			return new PersonConverter();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class AlienConverterConfiguration {
+
+		@Bean
+		@ConfigurationPropertiesBinding
+		Converter<String, Alien> alienConverter() {
+			return new AlienConverter();
 		}
 
 	}
@@ -2051,6 +2141,32 @@ class ConfigurationPropertiesTests {
 	}
 
 	@EnableConfigurationProperties
+	@ConfigurationProperties(prefix = "test")
+	static class PersonAndAliensProperties {
+
+		private Person person;
+
+		private List<Alien> aliens;
+
+		Person getPerson() {
+			return this.person;
+		}
+
+		void setPerson(Person person) {
+			this.person = person;
+		}
+
+		List<Alien> getAliens() {
+			return this.aliens;
+		}
+
+		void setAliens(List<Alien> aliens) {
+			this.aliens = aliens;
+		}
+
+	}
+
+	@EnableConfigurationProperties
 	@ConfigurationProperties(prefix = "sample")
 	static class MapWithNumericKeyProperties {
 
@@ -2416,8 +2532,7 @@ class ConfigurationPropertiesTests {
 
 		@Override
 		public Alien convert(String source) {
-			String[] content = StringUtils.split(source, " ");
-			return new Alien(content[0], content[1]);
+			return new Alien(new StringBuilder(source).reverse().toString());
 		}
 
 	}
@@ -2485,21 +2600,14 @@ class ConfigurationPropertiesTests {
 
 	static class Alien {
 
-		private final String firstName;
+		private final String name;
 
-		private final String lastName;
-
-		Alien(String firstName, String lastName) {
-			this.firstName = firstName;
-			this.lastName = lastName;
+		Alien(String name) {
+			this.name = name;
 		}
 
-		String getFirstName() {
-			return this.firstName;
-		}
-
-		String getLastName() {
-			return this.lastName;
+		String getName() {
+			return this.name;
 		}
 
 	}
@@ -3048,6 +3156,46 @@ class ConfigurationPropertiesTests {
 
 		void setProp(String prop) {
 			this.prop = prop;
+		}
+
+	}
+
+	@EnableConfigurationProperties(ResourceArrayProperties.class)
+	static class ResourceArrayPropertiesConfiguration {
+
+	}
+
+	@ConfigurationProperties("test")
+	static class ResourceArrayProperties {
+
+		private Resource[] resources;
+
+		Resource[] getResources() {
+			return this.resources;
+		}
+
+		void setResources(Resource[] resources) {
+			this.resources = resources;
+		}
+
+	}
+
+	@EnableConfigurationProperties(ResourceCollectionProperties.class)
+	static class ResourceCollectionPropertiesConfiguration {
+
+	}
+
+	@ConfigurationProperties("test")
+	static class ResourceCollectionProperties {
+
+		private Collection<Resource> resources;
+
+		Collection<Resource> getResources() {
+			return this.resources;
+		}
+
+		void setResources(Collection<Resource> resources) {
+			this.resources = resources;
 		}
 
 	}

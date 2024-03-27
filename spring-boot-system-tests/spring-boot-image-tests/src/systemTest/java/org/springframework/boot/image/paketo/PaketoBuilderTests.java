@@ -94,9 +94,10 @@ class PaketoBuilderTests {
 					.contains("paketo-buildpacks/ca-certificates", "paketo-buildpacks/bellsoft-liberica",
 							"paketo-buildpacks/executable-jar", "paketo-buildpacks/dist-zip",
 							"paketo-buildpacks/spring-boot");
-				metadata.processOfType("web").containsExactly("java", "org.springframework.boot.loader.JarLauncher");
+				metadata.processOfType("web")
+					.containsExactly("java", "org.springframework.boot.loader.launch.JarLauncher");
 				metadata.processOfType("executable-jar")
-					.containsExactly("java", "org.springframework.boot.loader.JarLauncher");
+					.containsExactly("java", "org.springframework.boot.loader.launch.JarLauncher");
 			});
 			assertImageHasJvmSbomLayer(imageReference, config);
 			assertImageHasDependenciesSbomLayer(imageReference, config, "executable-jar");
@@ -239,9 +240,10 @@ class PaketoBuilderTests {
 					.contains("paketo-buildpacks/ca-certificates", "paketo-buildpacks/bellsoft-liberica",
 							"paketo-buildpacks/executable-jar", "paketo-buildpacks/dist-zip",
 							"paketo-buildpacks/spring-boot");
-				metadata.processOfType("web").containsExactly("java", "org.springframework.boot.loader.WarLauncher");
+				metadata.processOfType("web")
+					.containsExactly("java", "org.springframework.boot.loader.launch.WarLauncher");
 				metadata.processOfType("executable-jar")
-					.containsExactly("java", "org.springframework.boot.loader.WarLauncher");
+					.containsExactly("java", "org.springframework.boot.loader.launch.WarLauncher");
 			});
 			assertImageHasJvmSbomLayer(imageReference, config);
 			assertImageHasDependenciesSbomLayer(imageReference, config, "executable-jar");
@@ -301,6 +303,7 @@ class PaketoBuilderTests {
 	@EnabledForJreRange(max = JRE.JAVA_17)
 	void nativeApp() throws Exception {
 		this.gradleBuild.expectDeprecationMessages("uses or overrides a deprecated API");
+		this.gradleBuild.expectDeprecationMessages("has been deprecated and marked for removal");
 		// these deprecations are transitive from the Native Build Tools Gradle plugin
 		this.gradleBuild
 			.expectDeprecationMessages("has been deprecated. This is scheduled to be removed in Gradle 9.0");
@@ -473,11 +476,9 @@ class PaketoBuilderTests {
 		if (javaVersion.startsWith("1.")) {
 			return javaVersion.substring(2, 3);
 		}
-		else {
-			int firstDotIndex = javaVersion.indexOf(".");
-			if (firstDotIndex != -1) {
-				return javaVersion.substring(0, firstDotIndex);
-			}
+		int firstDotIndex = javaVersion.indexOf(".");
+		if (firstDotIndex != -1) {
+			return javaVersion.substring(0, firstDotIndex);
 		}
 		return javaVersion;
 	}

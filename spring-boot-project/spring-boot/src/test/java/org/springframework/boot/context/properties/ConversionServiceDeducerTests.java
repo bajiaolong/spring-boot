@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.format.support.FormattingConversionService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,14 +70,16 @@ class ConversionServiceDeducerTests {
 	}
 
 	@Test
-	void getConversionServiceWhenHasQualifiedConverterBeansContainsCustomizedApplicationService() {
+	void getConversionServiceWhenHasQualifiedConverterBeansContainsCustomizedFormattingService() {
 		ApplicationContext applicationContext = new AnnotationConfigApplicationContext(
 				CustomConverterConfiguration.class);
 		ConversionServiceDeducer deducer = new ConversionServiceDeducer(applicationContext);
 		List<ConversionService> conversionServices = deducer.getConversionServices();
-		assertThat(conversionServices).hasSize(1);
-		assertThat(conversionServices.get(0)).isNotSameAs(ApplicationConversionService.getSharedInstance());
+		assertThat(conversionServices).hasSize(2);
+		assertThat(conversionServices.get(0)).isExactlyInstanceOf(FormattingConversionService.class);
 		assertThat(conversionServices.get(0).canConvert(InputStream.class, OutputStream.class)).isTrue();
+		assertThat(conversionServices.get(0).canConvert(CharSequence.class, InputStream.class)).isTrue();
+		assertThat(conversionServices.get(1)).isSameAs(ApplicationConversionService.getSharedInstance());
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -103,6 +106,12 @@ class ConversionServiceDeducerTests {
 			return new TestConverter();
 		}
 
+		@Bean
+		@ConfigurationPropertiesBinding
+		StringConverter stringConverter() {
+			return new StringConverter();
+		}
+
 	}
 
 	private static final class TestApplicationConversionService extends ApplicationConversionService {
@@ -113,6 +122,15 @@ class ConversionServiceDeducerTests {
 
 		@Override
 		public OutputStream convert(InputStream source) {
+			throw new UnsupportedOperationException();
+		}
+
+	}
+
+	private static final class StringConverter implements Converter<String, InputStream> {
+
+		@Override
+		public InputStream convert(String source) {
 			throw new UnsupportedOperationException();
 		}
 

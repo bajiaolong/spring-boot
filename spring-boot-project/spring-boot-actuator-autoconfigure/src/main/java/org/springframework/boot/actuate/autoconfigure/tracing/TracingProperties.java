@@ -103,6 +103,17 @@ public class TracingProperties {
 		 */
 		private List<String> remoteFields = new ArrayList<>();
 
+		/**
+		 * List of fields that should be accessible within the JVM process but not
+		 * propagated over the wire. Local fields are not supported with OpenTelemetry.
+		 */
+		private List<String> localFields = new ArrayList<>();
+
+		/**
+		 * List of fields that should automatically become tags.
+		 */
+		private List<String> tagFields = new ArrayList<>();
+
 		public boolean isEnabled() {
 			return this.enabled;
 		}
@@ -123,8 +134,24 @@ public class TracingProperties {
 			return this.remoteFields;
 		}
 
+		public List<String> getLocalFields() {
+			return this.localFields;
+		}
+
+		public List<String> getTagFields() {
+			return this.tagFields;
+		}
+
 		public void setRemoteFields(List<String> remoteFields) {
 			this.remoteFields = remoteFields;
+		}
+
+		public void setLocalFields(List<String> localFields) {
+			this.localFields = localFields;
+		}
+
+		public void setTagFields(List<String> tagFields) {
+			this.tagFields = tagFields;
 		}
 
 		public static class Correlation {
@@ -241,7 +268,7 @@ public class TracingProperties {
 			 * <a href="https://github.com/openzipkin/b3-propagation#multiple-headers">B3
 			 * multiple headers</a> propagation.
 			 */
-			B3_MULTI;
+			B3_MULTI
 
 		}
 

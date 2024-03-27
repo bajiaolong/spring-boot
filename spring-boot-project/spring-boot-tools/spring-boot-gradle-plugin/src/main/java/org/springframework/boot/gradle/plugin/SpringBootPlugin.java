@@ -81,6 +81,12 @@ public class SpringBootPlugin implements Plugin<Project> {
 	public static final String DEVELOPMENT_ONLY_CONFIGURATION_NAME = "developmentOnly";
 
 	/**
+	 * The name of the {@code testAndDevelopmentOnly} configuration.
+	 * @since 3.2.0
+	 */
+	public static final String TEST_AND_DEVELOPMENT_ONLY_CONFIGURATION_NAME = "testAndDevelopmentOnly";
+
+	/**
 	 * The name of the {@code productionRuntimeClasspath} configuration.
 	 */
 	public static final String PRODUCTION_RUNTIME_CLASSPATH_CONFIGURATION_NAME = "productionRuntimeClasspath";
@@ -139,7 +145,8 @@ public class SpringBootPlugin implements Plugin<Project> {
 				project.getArtifacts());
 		List<PluginApplicationAction> actions = Arrays.asList(new JavaPluginAction(singlePublishedArtifact),
 				new WarPluginAction(singlePublishedArtifact), new DependencyManagementPluginAction(),
-				new ApplicationPluginAction(), new KotlinPluginAction(), new NativeImagePluginAction());
+				new ApplicationPluginAction(), new KotlinPluginAction(), new NativeImagePluginAction(),
+				new CycloneDxPluginAction());
 		for (PluginApplicationAction action : actions) {
 			withPluginClassOfAction(action,
 					(pluginClass) -> project.getPlugins().withType(pluginClass, (plugin) -> action.execute(project)));

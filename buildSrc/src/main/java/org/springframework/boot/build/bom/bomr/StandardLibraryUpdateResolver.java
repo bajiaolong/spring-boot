@@ -19,14 +19,12 @@ package org.springframework.boot.build.bom.bomr;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.function.BiPredicate;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,19 +111,14 @@ class StandardLibraryUpdateResolver implements LibraryUpdateResolver {
 						getLaterVersionsForModule(group.getId(), plugin, library));
 			}
 		}
-		List<DependencyVersion> allVersions = moduleVersions.values()
+		return moduleVersions.values()
 			.stream()
 			.flatMap(SortedSet::stream)
 			.distinct()
 			.filter((dependencyVersion) -> this.predicate.test(library, dependencyVersion))
-			.toList();
-		if (allVersions.isEmpty()) {
-			return Collections.emptyList();
-		}
-		return allVersions.stream()
-			.map((version) -> new VersionOption.ResolvedVersionOption(version,
+			.map((version) -> (VersionOption) new VersionOption.ResolvedVersionOption(version,
 					getMissingModules(moduleVersions, version)))
-			.collect(Collectors.toList());
+			.toList();
 	}
 
 	private List<String> getMissingModules(Map<String, SortedSet<DependencyVersion>> moduleVersions,

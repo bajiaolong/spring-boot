@@ -44,8 +44,8 @@ class TarLayoutWriterTests {
 		}
 		try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(
 				new ByteArrayInputStream(outputStream.toByteArray()))) {
-			TarArchiveEntry directoryEntry = tarInputStream.getNextTarEntry();
-			TarArchiveEntry fileEntry = tarInputStream.getNextTarEntry();
+			TarArchiveEntry directoryEntry = tarInputStream.getNextEntry();
+			TarArchiveEntry fileEntry = tarInputStream.getNextEntry();
 			byte[] fileContent = new byte[(int) fileEntry.getSize()];
 			tarInputStream.read(fileContent);
 			assertThat(tarInputStream.getNextEntry()).isNull();
